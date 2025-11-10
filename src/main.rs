@@ -105,7 +105,7 @@ fn print_help() {
     println!("Compute Safe transaction hashes for JSON logs.");
     println!("Usage: cargo run --release -- [options] [paths...]");
     println!("\nOptions:");
-    println!("  --chain-id <id>        Override the chain id (default: 10143)");
+    println!("  --chain-id <id>        Override the chain id (default: 143)");
     println!("  --safe-address <addr>  Fallback Safe address if files omit it");
     println!("  --fail-on-mismatch     Return a non-zero exit status on mismatch");
     println!("  --input <path>         Directory or JSON file to include");
