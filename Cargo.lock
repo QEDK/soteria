@@ -415,20 +415,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
 
 [[package]]
-name = "safe-hash-action"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "hex",
- "owo-colors",
- "primitive-types",
- "serde",
- "serde_json",
- "tiny-keccak",
-]
-
-[[package]]
 name = "serde"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -469,6 +455,20 @@ dependencies = [
  "ryu",
  "serde",
  "serde_core",
+]
+
+[[package]]
+name = "soteria"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "hex",
+ "owo-colors",
+ "primitive-types",
+ "serde",
+ "serde_json",
+ "tiny-keccak",
 ]
 
 [[package]]

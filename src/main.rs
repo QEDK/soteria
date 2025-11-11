@@ -61,7 +61,7 @@ fn main() -> Result<()> {
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "safe-hash-action",
+    name = "soteria",
     version,
     author,
     about = "Compute Safe transaction hashes for JSON log files"

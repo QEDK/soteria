@@ -1,5 +1,5 @@
 [package]
-name = "safe-hash-action"
+name = "soteria"
 authors = ["Monad Foundation"]
 license = "Apache-2.0"
 version = "0.1.0"
