@@ -1,7 +1,8 @@
 use anyhow::{anyhow, Context, Result};
+use clap::{ArgAction, Parser};
+use owo_colors::OwoColorize;
 use primitive_types::U256;
 use serde::Deserialize;
-use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -10,17 +11,22 @@ const DOMAIN_TYPE: &str = "EIP712Domain(uint256 chainId,address verifyingContrac
 const SAFE_TX_TYPE: &str = "SafeTx(address to,uint256 value,bytes data,uint8 operation,uint256 safeTxGas,uint256 baseGas,uint256 gasPrice,address gasToken,address refundReceiver,uint256 nonce)";
 
 fn main() -> Result<()> {
-    let args = CliArgs::from_env()?;
-    let mut files = collect_targets(&args.inputs, args.safe_address.as_deref())?;
-    if files.is_empty() {
-        println!("No JSON files found. Provide one or more directories or files to process.");
+    let args = CliArgs::parse();
+    let resolved_inputs = args.resolved_inputs();
+    let mut targets = collect_targets(&resolved_inputs, args.safe_address.as_deref())?;
+    if targets.is_empty() {
+        println!(
+            "{}",
+            "No JSON files found. Provide one or more directories or files to process."
+                .yellow()
+        );
         return Ok(());
     }
-    files.sort_by(|a, b| a.path.cmp(&b.path));
+    targets.sort_by(|a, b| a.path.cmp(&b.path));
 
     let mut mismatches = Vec::new();
 
-    for target in files {
+    for target in targets {
         match process_file(
             &target.path,
             args.chain_id,
@@ -34,15 +40,18 @@ fn main() -> Result<()> {
                 }
             }
             Err(err) => {
-                println!("{} :: error :: {}", target.path.display(), err);
+                let message = format!("{} :: error :: {}", target.path.display(), err);
+                println!("{}", message.red());
             }
         }
     }
 
     if !mismatches.is_empty() {
+        let message = format!("{} mismatches detected.", mismatches.len());
         if args.ignore_error {
-            println!("\n{} mismatches detected.", mismatches.len());
+            println!("\n{}", message.yellow());
         } else {
+            println!("{}", message.red());
             return Err(anyhow!("expected hash mismatch"));
         }
     }
@@ -50,72 +59,42 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Debug)]
+#[derive(Parser, Debug)]
+#[command(
+    name = "safe-hash-action",
+    version,
+    author,
+    about = "Compute Safe transaction hashes for JSON log files"
+)]
 struct CliArgs {
-    inputs: Vec<PathBuf>,
+    /// Additional file or directory inputs (repeatable via --input)
+    #[arg(short = 'i', long = "input", alias = "dir", value_name = "PATH", action = ArgAction::Append)]
+    input: Vec<PathBuf>,
+    /// Positional paths to include
+    #[arg(value_name = "PATH")]
+    paths: Vec<PathBuf>,
+    /// Chain ID for the Monad network
+    #[arg(long = "chain-id", default_value_t = 143)]
     chain_id: u64,
+    /// Override Safe address for all transactions
+    #[arg(long = "safe-address")]
     safe_address: Option<String>,
+    /// Do not fail the process when mismatches occur
+    #[arg(long = "ignore-error", action = ArgAction::SetTrue)]
     ignore_error: bool,
 }
 
 impl CliArgs {
-    fn from_env() -> Result<Self> {
-        let mut args = env::args().skip(1);
+    fn resolved_inputs(&self) -> Vec<PathBuf> {
         let mut inputs = Vec::new();
-        let mut chain_id = 143u64;
-        let mut safe_address = None;
-        let mut ignore_error = false;
-
-        while let Some(arg) = args.next() {
-            match arg.as_str() {
-                "--input" | "--dir" | "-i" => {
-                    let next = args.next().context("missing value for --input")?;
-                    inputs.push(PathBuf::from(next));
-                }
-                "--chain-id" => {
-                    let next = args.next().context("missing value for --chain-id")?;
-                    chain_id = next.parse().context("invalid chain id")?;
-                }
-                "--safe-address" => {
-                    let next = args.next().context("missing value for --safe-address")?;
-                    safe_address = Some(next);
-                }
-                "--ignore-error" => {
-                    ignore_error = true;
-                }
-                "--help" | "-h" => {
-                    print_help();
-                    std::process::exit(0);
-                }
-                other => {
-                    inputs.push(PathBuf::from(other));
-                }
-            }
-        }
-
+        inputs.extend(self.input.iter().cloned());
+        inputs.extend(self.paths.iter().cloned());
         if inputs.is_empty() {
             inputs.push(PathBuf::from("src/logs"));
             inputs.push(PathBuf::from("src/accountConfigs"));
         }
-
-        Ok(Self {
-            inputs,
-            chain_id,
-            safe_address,
-            ignore_error,
-        })
+        inputs
     }
-}
-
-fn print_help() {
-    println!("Compute Safe transaction hashes for JSON logs.");
-    println!("Usage: cargo run --release -- [options] [paths...]");
-    println!("\nOptions:");
-    println!("  --chain-id <id>        Override the chain id (default: 143)");
-    println!("  --safe-address <addr>  Fallback Safe address if files omit it");
-    println!("  --ignore-error         Return a zero exit status on mismatch");
-    println!("  --input <path>         Directory or JSON file to include");
-    println!("  -h, --help             Show this help text");
 }
 
 #[derive(Debug, Deserialize)]
@@ -126,6 +105,10 @@ struct TransactionLog {
     calldata: String,
     operation: Option<String>,
     current_nonce: u64,
+    #[serde(default)]
+    safe_address: Option<String>,
+    #[serde(default, rename = "final_signer")]
+    final_signer: Option<String>,
     expected_hash: Option<String>,
     #[serde(default, deserialize_with = "string_or_number_opt")]
     safe_tx_gas: Option<String>,
@@ -154,33 +137,41 @@ struct Target {
 
 impl Report {
     fn render_line(&self) -> String {
+        let path = self.path.display().to_string();
+        let safe = format!("safe={}", self.safe_address_used);
+
         match (&self.expected_hash, self.matched) {
-            (Some(_), Some(true)) => format!(
-                "{} :: hash={} (expected) :: safe={}",
-                self.path.display(),
-                self.computed_hash,
-                self.safe_address_used
-            ),
-            (Some(expected), Some(false)) => format!(
-                "{} :: hash={} (expected {}) :: safe={} :: mismatch",
-                self.path.display(),
-                self.computed_hash,
-                expected,
-                self.safe_address_used
-            ),
-            (Some(expected), None) => format!(
-                "{} :: hash={} (expected {}) :: safe={}",
-                self.path.display(),
-                self.computed_hash,
-                expected,
-                self.safe_address_used
-            ),
-            (None, _) => format!(
-                "{} :: hash={} :: safe={}",
-                self.path.display(),
-                self.computed_hash,
-                self.safe_address_used
-            ),
+            (Some(_), Some(true)) => {
+                let hash = format!("hash={} (expected)", self.computed_hash);
+                format!("{} :: {} :: {}", path.cyan(), hash.green(), safe.magenta())
+            }
+            (Some(expected), Some(false)) => {
+                let hash = format!("hash={}", self.computed_hash);
+                let expected_segment = format!("expected {}", expected);
+                format!(
+                    "{} :: {} :: {} :: {} :: {}",
+                    path.cyan(),
+                    hash.red(),
+                    expected_segment.yellow(),
+                    safe.magenta(),
+                    "mismatch".bright_red()
+                )
+            }
+            (Some(expected), None) => {
+                let hash = format!("hash={}", self.computed_hash);
+                let expected_segment = format!("expected {}", expected);
+                format!(
+                    "{} :: {} :: {} :: {}",
+                    path.cyan(),
+                    hash.cyan(),
+                    expected_segment.yellow(),
+                    safe.magenta()
+                )
+            }
+            (None, _) => {
+                let hash = format!("hash={}", self.computed_hash);
+                format!("{} :: {} :: {}", path.cyan(), hash.bright_white(), safe.magenta())
+            }
         }
     }
 
@@ -250,6 +241,8 @@ fn process_file(
 
     let safe_address_str = safe_address
         .or(directory_safe)
+        .or(tx.safe_address.as_deref())
+        .or(tx.final_signer.as_deref())
         .ok_or_else(|| anyhow!("no Safe address provided"))?;
 
     let computed = compute_safe_tx_hash(&tx, safe_address_str, chain_id)?;
