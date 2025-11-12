@@ -1,7 +1,13 @@
-# safe-hash-action
-
+# 🚦 soteria 
+A simple CLI tool that validates Safe transaction hashes in JSON log files.
 
 ## Quickstart
+
+### Using CLI
+```bash
+cargo install --git https://github.com/monad-developers/soteria.git
+soteria /path/to/your/logs/directory
+```
 
 ### Using Docker
 ```bash

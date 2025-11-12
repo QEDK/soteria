@@ -64,10 +64,10 @@ fn main() -> Result<()> {
     name = "soteria",
     version,
     author,
-    about = "Compute Safe transaction hashes for JSON log files"
+    about = "Validate Safe transaction hashes for JSON log files"
 )]
 struct CliArgs {
-    /// Additional file or directory inputs (repeatable via --input)
+    /// Additional file or directory inputs
     #[arg(short = 'i', long = "input", alias = "dir", value_name = "PATH", action = ArgAction::Append)]
     input: Vec<PathBuf>,
     /// Positional paths to include
