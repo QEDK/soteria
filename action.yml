@@ -96,7 +96,7 @@ runs:
       id: download
       uses: robinraju/release-downloader@v1
       with:
-        repository: 'monad-developers/soteria'
+        repository: 'QEDK/soteria'
         latest: ${{ inputs.version == 'latest' }}
         tag: ${{ inputs.version != 'latest' && inputs.version || '' }}
         fileName: '*'
